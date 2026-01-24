@@ -147,6 +147,12 @@ function M.open_split_view(desc_path, code_path, detail)
   vim.b.leetcode_slug = detail.titleSlug
   vim.b.leetcode_id = detail.questionId
 
+  if detail.sampleTestCase then
+    vim.b.leetcode_test_case = detail.sampleTestCase
+  elseif detail.exampleTestcases then
+    vim.b.leetcode_test_case = detail.exampleTestcases
+  end
+
   vim.notify("Opened: " .. detail.title, vim.log.levels.INFO)
 end
 
