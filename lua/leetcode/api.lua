@@ -122,58 +122,86 @@ function M.get_daily_challenge(callback)
   end)
 end
 
-function M.submit_solution(slug, code, lang, callback)
+function M.submit_solution(slug, question_id, code, lang, callback)
   local url = "https://leetcode.com/problems/" .. slug .. "/submit/"
 
   vim.schedule(function()
     local http = require("leetcode.http")
-    local success, result = pcall(http.request, "POST", url, {
+
+    local data = {
       lang = lang,
-      question_id = tostring(slug),
+      question_id = question_id,
       typed_code = code,
-    })
+    }
+
+    local success, result = pcall(http.request, "POST", url, data)
 
     if not success then
-      vim.notify("Failed to submit solution: " .. tostring(result), vim.log.levels.ERROR)
+      vim.notify("Submission request failed: " .. tostring(result), vim.log.levels.ERROR)
       callback(nil)
       return
     end
 
-    if result and result.submission_id then
-      callback(result.submission_id)
+    if type(result) == "table" then
+      if result.submission_id then
+        callback(tonumber(result.submission_id))
+      elseif result.interpret_id then
+        callback(tonumber(result.interpret_id))
+      elseif result.error then
+        vim.notify("Submission error: " .. result.error, vim.log.levels.ERROR)
+        callback(nil)
+      else
+        vim.notify("Unexpected response structure", vim.log.levels.ERROR)
+        callback(nil)
+      end
     else
-      vim.notify("Submission failed - invalid response", vim.log.levels.ERROR)
+      vim.notify("Invalid response type from submission", vim.log.levels.ERROR)
       callback(nil)
     end
   end)
 end
 
 function M.check_submission(submission_id, callback)
-  local query = [[
-    query submissionDetails($submissionId: Int!) {
-      submissionDetails(submissionId: $submissionId) {
-        runtime
-        runtimeDisplay
-        runtimePercentile
-        memory
-        memoryDisplay
-        memoryPercentile
-        statusCode
-        statusDisplay
-        lang
-        totalCorrect
-        totalTestcases
-        isPending
-      }
-    }
-  ]]
+  local url = "https://leetcode.com/submissions/detail/" .. submission_id .. "/check/"
 
   vim.schedule(function()
     local http = require("leetcode.http")
-    local success, result = pcall(http.graphql, query, { submissionId = submission_id })
+    local success, result = pcall(http.request, "GET", url)
 
-    if success and result and result.data then
-      callback(result.data.submissionDetails)
+    if not success then
+      callback(nil)
+      return
+    end
+
+    if result and type(result) == "table" then
+      local memory_num = nil
+      if result.status_memory and type(result.status_memory) == "string" then
+        memory_num = tonumber(result.status_memory:match("([%d.]+)"))
+      elseif result.status_memory and type(result.status_memory) == "number" then
+        memory_num = result.status_memory
+      end
+
+      local runtime_num = nil
+      if result.status_runtime and type(result.status_runtime) == "string" then
+        runtime_num = tonumber(result.status_runtime:match("([%d.]+)"))
+      elseif result.status_runtime and type(result.status_runtime) == "number" then
+        runtime_num = result.status_runtime
+      end
+
+      local formatted = {
+        statusCode = result.status_code,
+        statusDisplay = result.status_msg,
+        isPending = result.state ~= "SUCCESS",
+        runtime = runtime_num,
+        runtimeDisplay = result.status_runtime,
+        runtimePercentile = result.runtime_percentile,
+        memory = memory_num,
+        memoryDisplay = result.status_memory,
+        memoryPercentile = result.memory_percentile,
+        totalCorrect = result.total_correct,
+        totalTestcases = result.total_testcases,
+      }
+      callback(formatted)
     else
       callback(nil)
     end

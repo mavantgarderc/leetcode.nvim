@@ -1,6 +1,4 @@
 local M = {}
-local api = require("leetcode.api")
-local deps = require("leetcode.deps")
 
 function M.get_extension(lang_slug)
   local leetcode = require("leetcode")
@@ -15,6 +13,7 @@ function M.html_to_markdown(html_content)
     return "# No description available\n\nThis problem does not have a description."
   end
 
+  local deps = require("leetcode.deps")
   local script_path = deps.get_html2text_path()
 
   if vim.fn.filereadable(script_path) ~= 1 then
@@ -69,6 +68,7 @@ function M.initialize(slug, lang_slug, problem_data)
     M.create_problem_files(slug, lang_slug, problem_data)
   else
     vim.notify("Fetching problem: " .. slug, vim.log.levels.INFO)
+    local api = require("leetcode.api")
     api.get_problem_detail(slug, function(detail)
       if detail then
         M.create_problem_files(slug, lang_slug, detail)
