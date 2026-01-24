@@ -64,13 +64,17 @@ function M.html_to_markdown(html_content)
 end
 
 function M.initialize(slug, lang_slug, problem_data)
-  if problem_data then
+  vim.notify("Initializing problem: " .. slug .. " (lang: " .. lang_slug .. ")", vim.log.levels.DEBUG)
+
+  if problem_data and problem_data.content then
+    vim.notify("Using cached problem data", vim.log.levels.DEBUG)
     M.create_problem_files(slug, lang_slug, problem_data)
   else
-    vim.notify("Fetching problem: " .. slug, vim.log.levels.INFO)
+    vim.notify("Fetching problem details for: " .. slug, vim.log.levels.INFO)
     local api = require("leetcode.api")
     api.get_problem_detail(slug, function(detail)
       if detail then
+        vim.notify("Problem details fetched successfully", vim.log.levels.DEBUG)
         M.create_problem_files(slug, lang_slug, detail)
       else
         vim.notify("Failed to fetch problem: " .. slug, vim.log.levels.ERROR)
@@ -80,21 +84,30 @@ function M.initialize(slug, lang_slug, problem_data)
 end
 
 function M.create_problem_files(slug, lang_slug, detail)
+  vim.notify("Creating problem files for: " .. slug, vim.log.levels.DEBUG)
+
   local leetcode = require("leetcode")
   local problem_dir = leetcode.config.storage_dir .. "/" .. slug
 
   vim.fn.mkdir(problem_dir, "p")
+  vim.notify("Created directory: " .. problem_dir, vim.log.levels.DEBUG)
+
+  if not detail.content then
+    vim.notify("No content field in problem detail!", vim.log.levels.ERROR)
+    return
+  end
 
   local desc_path = problem_dir .. "/description.md"
   local markdown = M.html_to_markdown(detail.content)
 
   local desc_file = io.open(desc_path, "w")
   if not desc_file then
-    vim.notify("Failed to create description file", vim.log.levels.ERROR)
+    vim.notify("Failed to create description file: " .. desc_path, vim.log.levels.ERROR)
     return
   end
   desc_file:write(markdown)
   desc_file:close()
+  vim.notify("Saved description to: " .. desc_path .. " (" .. #markdown .. " bytes)", vim.log.levels.DEBUG)
 
   local code_snippet = nil
   if detail.codeSnippets then
@@ -115,16 +128,31 @@ function M.create_problem_files(slug, lang_slug, detail)
   local code_path = problem_dir .. "/" .. slug .. "." .. ext
   local code_file = io.open(code_path, "w")
   if not code_file then
-    vim.notify("Failed to create code file", vim.log.levels.ERROR)
+    vim.notify("Failed to create code file: " .. code_path, vim.log.levels.ERROR)
     return
   end
   code_file:write(code_snippet)
   code_file:close()
+  vim.notify("Saved code to: " .. code_path .. " (" .. #code_snippet .. " bytes)", vim.log.levels.DEBUG)
 
-  vim.schedule(function() M.open_split_view(desc_path, code_path, detail) end)
+  vim.schedule(function()
+    vim.defer_fn(function() M.open_split_view(desc_path, code_path, detail) end, 50)
+  end)
 end
 
 function M.open_split_view(desc_path, code_path, detail)
+  vim.notify("Opening split view", vim.log.levels.DEBUG)
+
+  if vim.fn.filereadable(desc_path) ~= 1 then
+    vim.notify("Description file not found: " .. desc_path, vim.log.levels.ERROR)
+    return
+  end
+
+  if vim.fn.filereadable(code_path) ~= 1 then
+    vim.notify("Code file not found: " .. code_path, vim.log.levels.ERROR)
+    return
+  end
+
   vim.cmd("only")
 
   vim.cmd("vsplit")
@@ -132,7 +160,8 @@ function M.open_split_view(desc_path, code_path, detail)
   vim.cmd("wincmd h")
   vim.cmd("edit " .. vim.fn.fnameescape(desc_path))
 
-  vim.cmd("edit!")
+  local desc_lines = vim.api.nvim_buf_line_count(0)
+  vim.notify("Description buffer loaded: " .. desc_lines .. " lines", vim.log.levels.DEBUG)
 
   vim.bo.modifiable = false
   vim.bo.readonly = true
@@ -142,7 +171,8 @@ function M.open_split_view(desc_path, code_path, detail)
   vim.cmd("wincmd l")
   vim.cmd("edit " .. vim.fn.fnameescape(code_path))
 
-  vim.cmd("edit!")
+  local code_lines = vim.api.nvim_buf_line_count(0)
+  vim.notify("Code buffer loaded: " .. code_lines .. " lines", vim.log.levels.DEBUG)
 
   vim.b.leetcode_slug = detail.titleSlug
   vim.b.leetcode_id = detail.questionId
