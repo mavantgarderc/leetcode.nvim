@@ -31,47 +31,19 @@ function M.get_problems(callback)
       return
     end
 
-    if result then
-      vim.notify("API Response received, checking structure...", vim.log.levels.DEBUG)
-
-      if result.errors then
-        vim.notify("API returned errors: " .. vim.inspect(result.errors), vim.log.levels.ERROR)
-        callback(nil)
-        return
-      end
-
-      if result.data then
-        vim.notify("Has data field", vim.log.levels.DEBUG)
-
-        if result.data.problemsetQuestionList then
-          vim.notify("Has problemsetQuestionList field", vim.log.levels.DEBUG)
-
-          if result.data.problemsetQuestionList.questions then
-            local count = #result.data.problemsetQuestionList.questions
-            vim.notify("Found " .. count .. " problems", vim.log.levels.INFO)
-            callback(result.data.problemsetQuestionList.questions)
-            return
-          else
-            vim.notify("No 'questions' field in problemsetQuestionList", vim.log.levels.ERROR)
-            vim.notify(
-              "Available fields: " .. vim.inspect(vim.tbl_keys(result.data.problemsetQuestionList)),
-              vim.log.levels.DEBUG
-            )
-          end
-        else
-          vim.notify("No 'problemsetQuestionList' field in data", vim.log.levels.ERROR)
-          vim.notify("Available fields: " .. vim.inspect(vim.tbl_keys(result.data)), vim.log.levels.DEBUG)
-        end
-      else
-        vim.notify("No 'data' field in response", vim.log.levels.ERROR)
-        vim.notify("Response keys: " .. vim.inspect(vim.tbl_keys(result)), vim.log.levels.DEBUG)
-      end
+    if
+      result
+      and result.data
+      and result.data.problemsetQuestionList
+      and result.data.problemsetQuestionList.questions
+    then
+      local count = #result.data.problemsetQuestionList.questions
+      vim.notify("Found " .. count .. " problems", vim.log.levels.INFO)
+      callback(result.data.problemsetQuestionList.questions)
     else
-      vim.notify("Result is nil", vim.log.levels.ERROR)
+      vim.notify("Invalid response from LeetCode API", vim.log.levels.ERROR)
+      callback(nil)
     end
-
-    vim.notify("Invalid response from LeetCode API", vim.log.levels.ERROR)
-    callback(nil)
   end)
 end
 
@@ -85,6 +57,14 @@ function M.get_problem_detail(slug, callback)
         titleSlug
         content
         difficulty
+        likes
+        dislikes
+        similarQuestions
+        topicTags {
+          name
+          slug
+        }
+        companyTagStats
         codeSnippets {
           lang
           langSlug
@@ -92,6 +72,11 @@ function M.get_problem_detail(slug, callback)
         }
         sampleTestCase
         exampleTestcases
+        hints
+        solution {
+          id
+          canSeeDetail
+        }
       }
     }
   ]]
