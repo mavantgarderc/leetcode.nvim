@@ -1,6 +1,5 @@
 local M = {}
 
-M.config = {}
 M.state = {
   selected_language = "python3",
   problems_cache = nil,
@@ -26,27 +25,6 @@ M.languages = {
   { name = "Ruby", slug = "ruby", ext = "rb" },
 }
 
-local defaults = {
-  storage_dir = vim.fn.expand("~/leetcode"),
-  env_file = vim.fn.expand("~/.config/nvim/.env"),
-  cache_ttl = 3600,
-  default_language = "python3",
-  http_method = nil,
-  debug = false,
-  border_style = "rounded",
-  icons = {
-    solved = "✓",
-    attempted = "○",
-    unsolved = " ",
-    locked = "🔒",
-  },
-  difficulty_colors = {
-    Easy = "LeetCodeEasy",
-    Medium = "LeetCodeMedium",
-    Hard = "LeetCodeHard",
-  },
-}
-
 local function check_dependencies()
   local deps = require("leetcode.deps")
   local ok, err = deps.check_and_install()
@@ -61,11 +39,41 @@ local function check_dependencies()
   return true
 end
 
+local function validate_language(lang_slug)
+  for _, lang in ipairs(M.languages) do
+    if lang.slug == lang_slug then return true end
+  end
+  return false
+end
+
 function M.setup(opts)
-  if M.state.setup_called then return end
+  if M.state.setup_called then
+    vim.notify("leetcode.nvim: setup() called multiple times, ignoring", vim.log.levels.WARN)
+    return
+  end
   M.state.setup_called = true
 
-  M.config = vim.tbl_deep_extend("force", defaults, opts or {})
+  local config_manager = require("leetcode.config")
+  local ok, result = pcall(config_manager.setup, opts)
+
+  if not ok then
+    vim.notify("leetcode.nvim: Configuration error\n" .. tostring(result), vim.log.levels.ERROR)
+    return
+  end
+
+  M.config = result
+
+  if not validate_language(M.config.default_language) then
+    vim.notify(
+      string.format(
+        "leetcode.nvim: Invalid default_language '%s', falling back to 'python3'",
+        M.config.default_language
+      ),
+      vim.log.levels.WARN
+    )
+    M.config.default_language = "python3"
+  end
+
   M.state.selected_language = M.config.default_language
 
   if M.config.debug then
@@ -100,9 +108,17 @@ function M.setup_highlights()
 end
 
 function M.setup_commands()
-  vim.api.nvim_create_user_command("LeetCodeList", function() M.show_floating_problem_list() end, {})
+  vim.api.nvim_create_user_command(
+    "LeetCodeList",
+    function() M.show_floating_problem_list() end,
+    { desc = "Show LeetCode problem list" }
+  )
 
-  vim.api.nvim_create_user_command("LeetCodeDaily", function() M.open_daily_challenge() end, {})
+  vim.api.nvim_create_user_command(
+    "LeetCodeDaily",
+    function() M.open_daily_challenge() end,
+    { desc = "Open daily challenge" }
+  )
 
   vim.api.nvim_create_user_command("LeetCodeOpen", function(opts)
     if opts.args and opts.args ~= "" then
@@ -110,17 +126,27 @@ function M.setup_commands()
     else
       M.prompt_for_problem()
     end
-  end, { nargs = "?" })
+  end, { nargs = "?", desc = "Open a problem" })
 
-  vim.api.nvim_create_user_command("LeetCodeSubmit", function() M.submit_solution() end, {})
+  vim.api.nvim_create_user_command(
+    "LeetCodeSubmit",
+    function() M.submit_solution() end,
+    { desc = "Submit current solution" }
+  )
 
-  vim.api.nvim_create_user_command("LeetCodeTest", function() M.test_solution() end, {})
+  vim.api.nvim_create_user_command("LeetCodeTest", function() M.test_solution() end, { desc = "Test current solution" })
 
-  vim.api.nvim_create_user_command("LeetCodeStats", function() M.show_stats() end, {})
+  vim.api.nvim_create_user_command("LeetCodeStats", function() M.show_stats() end, { desc = "Show your statistics" })
 
-  vim.api.nvim_create_user_command("LeetCodeInfo", function() M.show_info() end, {})
+  vim.api.nvim_create_user_command("LeetCodeInfo", function() M.show_info() end, { desc = "Show plugin information" })
 
-  vim.api.nvim_create_user_command("LeetCodeDebug", function() M.toggle_debug() end, {})
+  vim.api.nvim_create_user_command("LeetCodeDebug", function() M.toggle_debug() end, { desc = "Toggle debug mode" })
+
+  vim.api.nvim_create_user_command(
+    "LeetCodeConfig",
+    function() M.show_config() end,
+    { desc = "Show current configuration" }
+  )
 end
 
 local function ensure_initialized()
@@ -183,6 +209,7 @@ end
 
 function M.show_info()
   if not ensure_initialized() then return end
+
   local http = require("leetcode.http")
   local method = http.get_method()
 
@@ -202,10 +229,32 @@ function M.show_info()
     "  :LeetCodeOpen   - Open problem",
     "  :LeetCodeSubmit - Submit solution",
     "  :LeetCodeStats  - View statistics",
+    "  :LeetCodeConfig - Show configuration",
     "  :LeetCodeDebug  - Toggle debug mode",
   }
 
   vim.notify(table.concat(info, "\n"), vim.log.levels.INFO)
+end
+
+function M.show_config()
+  if not ensure_initialized() then return end
+
+  local lines = {
+    "leetcode.nvim Configuration",
+    string.rep("=", 50),
+    "",
+  }
+
+  for key, value in pairs(M.config) do
+    local value_str = vim.inspect(value, { newline = " ", indent = "" })
+    if #value_str > 50 then value_str = value_str:sub(1, 47) .. "..." end
+    table.insert(lines, string.format("%-20s = %s", key, value_str))
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, "Run :help leetcode-config for documentation")
+
+  vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
 end
 
 function M.toggle_debug()
