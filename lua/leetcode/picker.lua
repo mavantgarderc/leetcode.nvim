@@ -266,7 +266,11 @@ function M.render()
 
   if M.state.winnr and vim.api.nvim_win_is_valid(M.state.winnr) then
     local cursor_line = header_lines + (M.state.selected_index - M.state.scroll_offset)
-    vim.api.nvim_win_set_cursor(M.state.winnr, { cursor_line, 0 })
+
+    local total_lines = vim.api.nvim_buf_line_count(M.state.bufnr)
+    if cursor_line > 0 and cursor_line <= total_lines then
+      vim.api.nvim_win_set_cursor(M.state.winnr, { cursor_line, 0 })
+    end
   end
 end
 
@@ -328,6 +332,17 @@ function M.open_random()
   math.randomseed(os.time())
   local random_index = math.random(1, #M.state.filtered_problems)
   M.state.selected_index = random_index
+
+  if M.state.winnr and vim.api.nvim_win_is_valid(M.state.winnr) then
+    local win_height = vim.api.nvim_win_get_height(M.state.winnr)
+    local visible_lines = win_height - 12
+
+    M.state.scroll_offset = math.max(0, random_index - math.floor(visible_lines / 2))
+
+    local max_offset = math.max(0, #M.state.filtered_problems - visible_lines)
+    M.state.scroll_offset = math.min(M.state.scroll_offset, max_offset)
+  end
+
   M.render()
 
   vim.defer_fn(function() M.open_selected() end, 100)
