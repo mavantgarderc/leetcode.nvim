@@ -84,7 +84,6 @@ function M.open_split_view(desc_path, code_path, detail)
   end
 
   vim.cmd("only")
-
   vim.cmd("vsplit")
 
   vim.cmd("wincmd h")
@@ -107,7 +106,14 @@ function M.open_split_view(desc_path, code_path, detail)
     vim.b.leetcode_test_case = detail.exampleTestcases
   end
 
-  vim.notify("Opened: " .. detail.title, vim.log.levels.INFO)
+  vim.diagnostic.disable(0)
+
+  local clients = vim.lsp.get_active_clients({ bufnr = 0 })
+  for _, client in ipairs(clients) do
+    vim.lsp.diagnostic.disable(0, client.id)
+  end
+
+  vim.notify("Opened: " .. detail.title .. " (diagnostics disabled)", vim.log.levels.INFO)
 end
 
 return M
