@@ -1,21 +1,35 @@
 local M = {}
 local api = require("leetcode.api")
+local storage = require("leetcode.storage")
 
 function M.show_problem_list()
   local leetcode = require("leetcode")
 
-  local now = os.time()
-  if leetcode.state.problems_cache and (now - leetcode.state.cache_timestamp) < leetcode.config.cache_ttl then
+  local cached_problems = storage.load_problems()
+
+  if cached_problems then
+    vim.notify("Loaded " .. #cached_problems .. " problems from cache", vim.log.levels.INFO)
+
+    cached_problems = storage.enrich_problems(cached_problems)
+
     local picker = require("leetcode.picker")
-    picker.show(leetcode.state.problems_cache)
+    picker.show(cached_problems)
+
+    local cache_info = storage.get_cache_info()
+    if cache_info.age and cache_info.age > 3600 then
+      vim.notify("Updating problem list in background...", vim.log.levels.INFO)
+      M.refresh_problems_background()
+    end
+
     return
   end
 
-  vim.notify("Fetching problems...", vim.log.levels.INFO)
+  vim.notify("Fetching problems from LeetCode...", vim.log.levels.INFO)
   api.get_problems(function(problems)
     if problems and #problems > 0 then
-      leetcode.state.problems_cache = problems
-      leetcode.state.cache_timestamp = now
+      storage.save_problems(problems)
+
+      problems = storage.enrich_problems(problems)
 
       local picker = require("leetcode.picker")
       picker.show(problems)
@@ -23,6 +37,21 @@ function M.show_problem_list()
       vim.notify("No problems fetched. Check your credentials in .env", vim.log.levels.ERROR)
     end
   end)
+end
+
+function M.refresh_problems_background()
+  api.get_problems(function(problems)
+    if problems and #problems > 0 then
+      storage.save_problems(problems)
+      vim.notify("Problem list updated", vim.log.levels.INFO)
+    end
+  end)
+end
+
+function M.force_refresh()
+  storage.clear_cache()
+  vim.notify("Clearing cache and fetching fresh data...", vim.log.levels.INFO)
+  M.show_problem_list()
 end
 
 function M.get_status_icon(status)
@@ -58,6 +87,14 @@ function M.show_stats(stats)
     for _, stat in ipairs(stats.matchedUser.submitStats.acSubmissionNum) do
       table.insert(lines, "    " .. stat.difficulty .. ": " .. stat.count)
     end
+  end
+
+  local streaks = storage.get_streaks()
+  if streaks.current > 0 or streaks.longest > 0 then
+    table.insert(lines, "")
+    table.insert(lines, "  Streaks:")
+    table.insert(lines, "    Current: " .. streaks.current .. " days")
+    table.insert(lines, "    Longest: " .. streaks.longest .. " days")
   end
 
   table.insert(lines, "")
