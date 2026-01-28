@@ -264,4 +264,95 @@ function M.toggle_debug()
   vim.notify("Debug mode: " .. tostring(http.debug), vim.log.levels.INFO)
 end
 
+function M.show_recent()
+  if not ensure_initialized() then return end
+
+  local storage = require("leetcode.storage")
+  local recent = storage.get_recently_opened(20)
+
+  if #recent == 0 then
+    vim.notify("No recently opened problems", vim.log.levels.INFO)
+    return
+  end
+
+  local options = {}
+  for _, item in ipairs(recent) do
+    table.insert(options, string.format("#%s - %s", item.slug:match("(%d+)") or "?", item.title))
+  end
+
+  vim.ui.select(options, {
+    prompt = "Recently Opened Problems",
+  }, function(choice)
+    if not choice then return end
+
+    local idx = nil
+    for i, opt in ipairs(options) do
+      if opt == choice then
+        idx = i
+        break
+      end
+    end
+
+    if idx then M.open_problem(recent[idx].slug) end
+  end)
+end
+
+function M.show_bookmarks()
+  if not ensure_initialized() then return end
+
+  local storage = require("leetcode.storage")
+  local bookmarks = storage.get_bookmarks()
+
+  local bookmark_list = {}
+  for slug, _ in pairs(bookmarks) do
+    table.insert(bookmark_list, slug)
+  end
+
+  if #bookmark_list == 0 then
+    vim.notify("No bookmarked problems", vim.log.levels.INFO)
+    return
+  end
+
+  table.sort(bookmark_list)
+
+  vim.ui.select(bookmark_list, {
+    prompt = "Bookmarked Problems",
+  }, function(choice)
+    if choice then M.open_problem(choice) end
+  end)
+end
+
+function M.open_random()
+  if not ensure_initialized() then return end
+
+  local storage = require("leetcode.storage")
+  local problems = storage.load_problems()
+
+  if not problems or #problems == 0 then
+    vim.notify("No problems available. Run :LeetCodeList first", vim.log.levels.WARN)
+    return
+  end
+
+  problems = storage.enrich_problems(problems)
+
+  local unsolved = {}
+  for _, p in ipairs(problems) do
+    if not p.isPaidOnly and p.status ~= "ac" then table.insert(unsolved, p) end
+  end
+
+  if #unsolved == 0 then
+    vim.notify("Congratulations! You've solved all problems!", vim.log.levels.INFO)
+    return
+  end
+
+  math.randomseed(os.time())
+  local random_problem = unsolved[math.random(1, #unsolved)]
+
+  vim.notify(
+    "Random problem: #" .. random_problem.questionFrontendId .. " - " .. random_problem.title,
+    vim.log.levels.INFO
+  )
+  M.open_problem(random_problem.titleSlug, random_problem)
+end
+
 return M
